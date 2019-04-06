@@ -18,6 +18,8 @@ class Thread(threading.Thread):
         self.client = client
         self.host = host
         self.port = port
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.server_address = (self.host, self.port)
         self.resources = {}
 
     def run(self):
@@ -38,7 +40,9 @@ class Thread(threading.Thread):
     def select_server_or_client(self):
         if self.client is False:
             print("Running server.")
-            self.run_service(self.port)
+            self.sock.bind(self.server_address)
+            while True:
+                self.run_service(self.port)
         else:
             print("Running client.")
             self.execute_service(self.port)
@@ -50,15 +54,13 @@ class Thread(threading.Thread):
         self.client_switch(port)()
 
     def client_sign_up(self):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        server_address = (self.host, self.port)
         folder = input("Specify folder to share files: ")
         try:
             files = os.listdir(folder)
             data = {'files': files}
-            sock.sendto(json.dumps(data).encode(), server_address)
+            self.sock.sendto(json.dumps(data).encode(), self.server_address)
             print('Waiting server response')
-            data, server = sock.recvfrom(4096)
+            data, server = self.sock.recvfrom(4096)
             print(f'Received: {data.decode()}')
         except FileNotFoundError:
             print("This folder doesn't exist.")
@@ -67,20 +69,16 @@ class Thread(threading.Thread):
             print("Host unavailable.")
             sys.exit(-2)
         finally:
-            sock.close()
+            self.sock.close()
 
     def server_sign_up(self):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        server_address = (self.host, self.port)
-        sock.bind(server_address)
-        while True:
-            print('Waiting for client connection')
-            data, address = sock.recvfrom(4096)
-            client_ip = address[0]
-            data = json.loads(data)
-            files = data['files']
-            print(f"Client {client_ip} connected and sent {len(files)} files")
-            if data:
-                print('Confirming connection')
-                self.resources[client_ip] = files
-                sock.sendto(b"Connected", address)
+        print('Waiting for client connection')
+        data, address = self.sock.recvfrom(4096)
+        client_ip = address[0]
+        data = json.loads(data)
+        files = data['files']
+        print(f"Client {client_ip} connected and sent {len(files)} files")
+        if data:
+            print('Confirming connection')
+            self.resources[client_ip] = files
+            self.sock.sendto(b"Connected", address)
