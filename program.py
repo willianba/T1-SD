@@ -53,13 +53,19 @@ class Thread(threading.Thread):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         server_address = (self.host, self.port)
         folder = input("Specify folder to share files: ")
-        files = os.listdir(folder)
-        data = {'files': files}
         try:
+            files = os.listdir(folder)
+            data = {'files': files}
             sock.sendto(json.dumps(data).encode(), server_address)
             print('Waiting server response')
             data, server = sock.recvfrom(4096)
             print(f'Received: {data.decode()}')
+        except FileNotFoundError:
+            print("This folder doesn't exist.")
+            self.client_sign_up()
+        except socket.gaierror:
+            print("Host unavailable.")
+            sys.exit(-2)
         finally:
             sock.close()
 
