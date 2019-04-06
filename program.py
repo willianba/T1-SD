@@ -1,42 +1,38 @@
+from services import Service
 import socket
 import threading
 import sys
 import os
 import json
 
-services = {
-    5000: "Sign Up",
-    5100: "future 1",
-    5200: "future 2"
-}
 
-
+# this is the default value for the switch statement below
 def service_undefined():
-    print("Service undefined.\nAvailable are:")
-    for service in services:
-        print(f'{service}: {services[service]}')
+    print("Service undefined.")
     sys.exit(-1)
 
 
 class Thread(threading.Thread):
-    def __init__(self, host, port, client=False):
+    def __init__(self, port, host="localhost", client=False):
         threading.Thread.__init__(self)
         self.client = client
         self.host = host
-        self.port = int(port)
+        self.port = port
         self.resources = {}
 
     def run(self):
         self.select_server_or_client()
 
+    # since python doesn't have a switch case statement, this is a way to implement it
     def server_switch(self, service):
         return {
-            5000: self.server_sign_up
+            Service.SIGN_UP.value: self.server_sign_up
         }.get(service, service_undefined)
 
+    # since python doesn't have a switch case statement, this is a way to implement it
     def client_switch(self, service):
         return {
-            5000: self.client_sign_up
+            Service.SIGN_UP.value: self.client_sign_up
         }.get(service, service_undefined)
 
     def select_server_or_client(self):
