@@ -20,56 +20,56 @@ def service_undefined():
     sys.exit(-1)
 
 
-def get_all_files():
+def execute_static_func(func, **kwargs):
     semaphore.acquire()
+    if kwargs:
+        result = func(kwargs)
+    else:
+        result = func()
+    semaphore.release()
+    if result:
+        return result
+
+
+def get_all_files():
     global resources
     result = {'files': []}
     for nested_list in list(resources.values()):
         for key_list in nested_list:
             result['files'].append(key_list)
-    semaphore.release()
     return result
 
 
-def get_peer_from_file(file):
-    semaphore.acquire()
+def get_peer_from_file(params):
     peer = None
     for client, resources_list in resources.items():
-        if file in resources_list:
+        if params['file'] in resources_list:
             peer = client
-    semaphore.release()
     return peer
 
 
-def create_new_client(client_ip, files):
-    semaphore.acquire()
+def create_new_client(params):
     global resources
     global connected_clients
-    resources[client_ip] = files
-    connected_clients[client_ip] = timeout
-    semaphore.release()
+    resources[params['client']] = params['files']
+    connected_clients[params['client']] = timeout
 
 
 def decrease_all_clients():
-    semaphore.acquire()
     global resources
     global connected_clients
     for client in connected_clients:
         connected_clients[client] -= 1
-    semaphore.release()
 
 
-def update_heartbeat(client_ip):
-    semaphore.acquire()
+def update_heartbeat(params):
     global connected_clients
-    connected_clients[client_ip] = timeout
-    semaphore.release()
+    connected_clients[params['client']] = timeout
 
 
 def remove_inactive_clients():
     remove_value = 0
     removed_clients = []
-    semaphore.acquire()
     global resources
     global connected_clients
     for client in connected_clients:
@@ -80,7 +80,6 @@ def remove_inactive_clients():
         print(f"Removing {client} due to inactivity")
         del resources[client]
         del connected_clients[client]
-    semaphore.release()
 
 
 def create_send_peer():
@@ -132,10 +131,10 @@ class Thread(threading.Thread):
             }.get(self.port, service_undefined)
 
     # generic method which contains all necessary exceptions to execute client functions
-    def execute_client_func(self, func, folder=None):
+    def execute_client_func(self, func, arg=None):
         try:
-            if folder:
-                func(folder)
+            if arg:
+                func(arg)
             else:
                 func()
         except FileNotFoundError:
@@ -210,14 +209,14 @@ class Thread(threading.Thread):
         if data:
             files = data['files']
             print(f"Client {client_ip} connected and sent {len(files)} files.")
-            create_new_client(client_ip, files)
+            execute_static_func(create_new_client, client=client_ip, files=files)
             self.sock.sendto(b"Connected", address)
 
     def server_query(self):
         data, address = self.sock.recvfrom(buffer)
         client_ip = address[0]
         print(f"Sending {client_ip} a list of available files.")
-        files = get_all_files()
+        files = execute_static_func(get_all_files)
         self.sock.sendto(json.dumps(files).encode(), address)
 
     def server_heartbeat(self):
@@ -227,10 +226,10 @@ class Thread(threading.Thread):
             self.sock.settimeout(verification_time + tolerance)
             data, address = self.sock.recvfrom(buffer)
             client_ip = address[0]
-            update_heartbeat(client_ip)
+            execute_static_func(update_heartbeat, client=client_ip)
         except socket.timeout:
-            decrease_all_clients()
-            remove_inactive_clients()
+            execute_static_func(decrease_all_clients)
+            execute_static_func(remove_inactive_clients)
             self.server_heartbeat()
 
     def server_retrieve(self):
@@ -240,7 +239,7 @@ class Thread(threading.Thread):
         if file:
             file = file['file']
             print(f"Client {client_ip} wants file {file}")
-            peer_ip = get_peer_from_file(file)
+            peer_ip = execute_static_func(get_peer_from_file, file=file)
             if peer_ip:
                 data = {'client': peer_ip}
                 self.sock.sendto(json.dumps(data).encode(), address)
