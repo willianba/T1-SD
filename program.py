@@ -6,7 +6,7 @@ import os
 import json
 
 resources = {}
-condition = threading.Condition()
+semaphore = threading.Condition()
 
 
 # this is the default value for the switch statement below
@@ -16,13 +16,13 @@ def service_undefined():
 
 
 def get_all_files():
+    semaphore.acquire()
     global resources
-    condition.acquire()
     result = {'files': []}
     for nested_list in list(resources.values()):
         for key_list in nested_list:
             result['files'].append(key_list)
-    condition.release()
+    semaphore.release()
     return result
 
 
@@ -92,10 +92,10 @@ class Thread(threading.Thread):
         print(f"Client {client_ip} connected and sent {len(files)} files")
         if data:
             print('Confirming connection')
+            semaphore.acquire()
             global resources
-            condition.acquire()
             resources[client_ip] = files
-            condition.release()
+            semaphore.release()
             self.sock.sendto(b"Connected", address)
 
     def client_query_files(self):
