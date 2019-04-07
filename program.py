@@ -6,18 +6,12 @@ import sys
 import os
 import json
 
-# hash to save clients and its resources
-resources = {}
-# hash to save clients connected to server
-connected_clients = {}
-# heartbeat timeout counter
-timeout = 2
-# time in seconds to receive/send heartbeat
-verification_time = 5
-# buffer size to sockets
-buffer = 4096
-# semaphore to control critical section
-semaphore = threading.Condition()
+resources = {}  # hash to save clients and its resources
+connected_clients = {}  # hash to save clients connected to server
+timeout = 2  # heartbeat timeout counter
+verification_time = 5  # time in seconds to receive/send heartbeat
+buffer = 4096  # buffer size to sockets
+semaphore = threading.Condition()  # semaphore to control critical section
 
 
 # this is the default value for the switch statement
@@ -35,6 +29,16 @@ def get_all_files():
             result['files'].append(key_list)
     semaphore.release()
     return result
+
+
+def get_peer_from_file(file):
+    semaphore.acquire()
+    peer = None
+    for client, resources_list in resources.items():
+        if file in resources_list:
+            peer = client
+    semaphore.release()
+    return peer
 
 
 def create_new_client(client_ip, files):
@@ -104,13 +108,15 @@ class Thread(threading.Thread):
             return {
                 Service.SIGN_UP.value: self.client_sign_up,
                 Service.QUERY.value: self.client_query,
-                Service.HEARTBEAT.value: self.client_heartbeat
+                Service.HEARTBEAT.value: self.client_heartbeat,
+                Service.RETRIEVE.value: self.client_retrieve
             }.get(self.port, service_undefined)
         else:
             return {
                 Service.SIGN_UP.value: self.server_sign_up,
                 Service.QUERY.value: self.server_query,
-                Service.HEARTBEAT.value: self.server_heartbeat
+                Service.HEARTBEAT.value: self.server_heartbeat,
+                Service.RETRIEVE.value: self.server_retrieve
             }.get(self.port, service_undefined)
 
     # generic method which contains all necessary exceptions to execute client functions
@@ -123,12 +129,18 @@ class Thread(threading.Thread):
         except FileNotFoundError:
             print("This folder doesn't exist.")
             self.client_sign_up()
+        except TypeError:
+            print("Need to specify file.")
+            self.client_retrieve()
         except ConnectionResetError:
             print("There are no running hosts.")
             sys.exit(-2)
         except socket.gaierror:
             print("Host unavailable.")
             sys.exit(-2)
+        except json.decoder.JSONDecodeError:
+            print("File not found.")
+            sys.exit(-3)
         finally:
             self.sock.close()
 
@@ -153,6 +165,15 @@ class Thread(threading.Thread):
             self.sock.sendto(b"heartbeat", self.server_address)
             sleep(verification_time)
 
+    def retrieve(self, file):
+        data = {'file': file}
+        self.sock.sendto(json.dumps(data).encode(), self.server_address)
+        print("Waiting for peer IP.")
+        peer_ip, server = self.sock.recvfrom(buffer)
+        peer_ip = json.loads(peer_ip.decode())
+        peer_ip = peer_ip['client']
+        print(f"Connecting to peer {peer_ip}")
+
     def client_sign_up(self):
         folder = input("Specify folder to share files: ")
         self.execute_client_func(self.sign_up, folder)
@@ -162,6 +183,10 @@ class Thread(threading.Thread):
 
     def client_heartbeat(self):
         self.execute_client_func(self.heartbeat)
+
+    def client_retrieve(self):
+        file = input("File to retrieve: ")
+        self.execute_client_func(self.retrieve, file)
 
     def server_sign_up(self):
         data, address = self.sock.recvfrom(buffer)
@@ -187,9 +212,22 @@ class Thread(threading.Thread):
             self.sock.settimeout(verification_time + tolerance)
             data, address = self.sock.recvfrom(buffer)
             client_ip = address[0]
-            print(f'Client {client_ip} sent a heartbeat')
             update_heartbeat(client_ip)
         except socket.timeout:
             decrease_all_clients()
             remove_inactive_clients()
             self.server_heartbeat()
+
+    def server_retrieve(self):
+        data, address = self.sock.recvfrom(buffer)
+        client_ip = address[0]
+        file = json.loads(data)
+        if file:
+            file = file['file']
+            print(f"Client {client_ip} wants file {file}")
+            peer_ip = get_peer_from_file(file)
+            if peer_ip:
+                data = {'client': peer_ip}
+                self.sock.sendto(json.dumps(data).encode(), address)
+            else:
+                self.sock.sendto(b"not found", address)
