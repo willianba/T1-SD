@@ -16,7 +16,8 @@ def start_server():
     threads = [
         Thread(Service.SIGN_UP.value),
         Thread(Service.QUERY.value),
-        Thread(Service.HEARTBEAT.value)
+        Thread(Service.HEARTBEAT.value),
+        Thread(Service.RETRIEVE.value)
     ]
     run_threads(threads)
 
@@ -36,7 +37,8 @@ def client_threads_factory(service, server_ip):
     return {
         Service.SIGN_UP.name: Thread(Service.SIGN_UP.value, server_ip, client=True),
         Service.HEARTBEAT.name: Thread(Service.HEARTBEAT.value, server_ip, client=True),
-        Service.QUERY.name: Thread(Service.QUERY.value, server_ip, client=True)
+        Service.QUERY.name: Thread(Service.QUERY.value, server_ip, client=True),
+        Service.RETRIEVE.name: Thread(Service.RETRIEVE.value, server_ip, client=True)
     }.get(service.upper())
 
 
@@ -48,6 +50,7 @@ def main():
                     help="Start program as server. Run all services in different threads.")
     ap.add_argument("-su", "--sign_up", action='store_true', help="Execute sign up service.")
     ap.add_argument("-q", "--query", action='store_true', help="Execute query service.")
+    ap.add_argument("-r", "--retrieve", action='store_true', help="Execute retrieve service.")
     ap.add_argument("-hb", "--heartbeat", action='store_true', help="Execute heartbeat service.")
     args = ap.parse_args()
     if args.client:
