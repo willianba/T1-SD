@@ -44,7 +44,9 @@ def get_peer_from_file(file):
 def create_new_client(client_ip, files):
     semaphore.acquire()
     global resources
+    global connected_clients
     resources[client_ip] = files
+    connected_clients[client_ip] = timeout
     semaphore.release()
 
 
@@ -81,6 +83,11 @@ def remove_inactive_clients():
     semaphore.release()
 
 
+def create_send_peer():
+    thread = Thread(Service.SEND.value)
+    thread.start()
+
+
 class Thread(threading.Thread):
     def __init__(self, port, host="localhost", client=False):
         threading.Thread.__init__(self)
@@ -98,9 +105,13 @@ class Thread(threading.Thread):
         if self.client:
             service()
         else:
-            self.sock.bind(self.server_address)
-            while True:
-                service()
+            try:
+                self.sock.bind(self.server_address)
+                while True:
+                    service()
+            except OSError:
+                print(f"Another process is already using port {self.server_address[1]}.")
+                sys.exit(-5)
 
     # since python doesn't have a switch case statement, this is a way to implement it
     def get_service(self):
@@ -116,7 +127,8 @@ class Thread(threading.Thread):
                 Service.SIGN_UP.value: self.server_sign_up,
                 Service.QUERY.value: self.server_query,
                 Service.HEARTBEAT.value: self.server_heartbeat,
-                Service.RETRIEVE.value: self.server_retrieve
+                Service.RETRIEVE.value: self.server_retrieve,
+                Service.SEND.value: self.peer_send_file
             }.get(self.port, service_undefined)
 
     # generic method which contains all necessary exceptions to execute client functions
@@ -150,7 +162,9 @@ class Thread(threading.Thread):
         self.sock.sendto(json.dumps(data).encode(), self.server_address)
         print('Waiting server response.')
         data, server = self.sock.recvfrom(buffer)
-        print(f'Received: {data.decode()}')
+        data = data.decode()
+        print(f"Received: {data}")
+        create_send_peer()
 
     def query(self):
         self.sock.sendto(b"query", self.server_address)
@@ -173,6 +187,7 @@ class Thread(threading.Thread):
         peer_ip = json.loads(peer_ip.decode())
         peer_ip = peer_ip['client']
         print(f"Connecting to peer {peer_ip}")
+        self.peer_retrieve_file(peer_ip, data)
 
     def client_sign_up(self):
         folder = input("Specify folder to share files: ")
@@ -231,3 +246,37 @@ class Thread(threading.Thread):
                 self.sock.sendto(json.dumps(data).encode(), address)
             else:
                 self.sock.sendto(b"not found", address)
+
+    def peer_send_file(self):
+        try:
+            self.sock.settimeout(verification_time)
+            file, address = self.sock.recvfrom(buffer)
+            file = json.loads(file.decode())
+            file = file['file']
+            client_ip = address[0]
+            opened_file = open(f"files/{file}", "rb")
+            data = opened_file.read(buffer)
+            print(f"Sending {file} to {client_ip}")
+            while data:
+                if self.sock.sendto(data, address):
+                    data = opened_file.read(buffer)
+            print("File sent")
+            opened_file.close()
+        except socket.timeout:
+            self.peer_send_file()
+
+    def peer_retrieve_file(self, peer_ip, file):
+        peer_address = (peer_ip, Service.SEND.value)
+        self.sock.sendto(json.dumps(file).encode(), peer_address)
+        file = file['file']
+        created_file = open(f'{file}', 'wb')
+        print(f"Retrieving file {file}")
+        data, address = self.sock.recvfrom(buffer)
+        try:
+            while data:
+                created_file.write(data)
+                self.sock.settimeout(2)
+                data, address = self.sock.recvfrom(buffer)
+        except socket.timeout:
+            created_file.close()
+            print("File Downloaded")
