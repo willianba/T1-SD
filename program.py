@@ -6,14 +6,21 @@ import sys
 import os
 import json
 
+# hash to save clients and its resources
 resources = {}
+# hash to save clients connected to server
 connected_clients = {}
+# heartbeat timeout counter
 timeout = 2
+# time in seconds to receive/send heartbeat
 verification_time = 5
+# buffer size to sockets
+buffer = 4096
+# semaphore to control critical section
 semaphore = threading.Condition()
 
 
-# this is the default value for the switch statement below
+# this is the default value for the switch statement
 def service_undefined():
     print("Service undefined.")
     sys.exit(-1)
@@ -33,9 +40,7 @@ def get_all_files():
 def create_new_client(client_ip, files):
     semaphore.acquire()
     global resources
-    global connected_clients
     resources[client_ip] = files
-    connected_clients[client_ip] = timeout
     semaphore.release()
 
 
@@ -48,10 +53,10 @@ def decrease_all_clients():
     semaphore.release()
 
 
-def increase_client(client_ip):
+def update_heartbeat(client_ip):
     semaphore.acquire()
     global connected_clients
-    connected_clients[client_ip] += 1
+    connected_clients[client_ip] = timeout
     semaphore.release()
 
 
@@ -132,13 +137,13 @@ class Thread(threading.Thread):
         data = {'files': files}
         self.sock.sendto(json.dumps(data).encode(), self.server_address)
         print('Waiting server response.')
-        data, server = self.sock.recvfrom(4096)
+        data, server = self.sock.recvfrom(buffer)
         print(f'Received: {data.decode()}')
 
     def query(self):
         self.sock.sendto(b"query", self.server_address)
         print("Waiting files from server.")
-        data = self.sock.recv(4096)
+        data = self.sock.recv(buffer)
         data = json.loads(data)
         files = data['files']
         print(f"These are the available files: {', '.join([str(x) for x in files])}")
@@ -159,7 +164,7 @@ class Thread(threading.Thread):
         self.execute_client_func(self.heartbeat)
 
     def server_sign_up(self):
-        data, address = self.sock.recvfrom(4096)
+        data, address = self.sock.recvfrom(buffer)
         client_ip = address[0]
         data = json.loads(data)
         if data:
@@ -169,21 +174,21 @@ class Thread(threading.Thread):
             self.sock.sendto(b"Connected", address)
 
     def server_query(self):
-        data, address = self.sock.recvfrom(4096)
+        data, address = self.sock.recvfrom(buffer)
         client_ip = address[0]
         print(f"Sending {client_ip} a list of available files.")
         files = get_all_files()
         self.sock.sendto(json.dumps(files).encode(), address)
 
     def server_heartbeat(self):
-        tolerance = 0.05
         try:
+            tolerance = 0.05
             # using tolerance because if timeout is the same as heartbeat time, it will timeout always
             self.sock.settimeout(verification_time + tolerance)
-            data, address = self.sock.recvfrom(4096)
+            data, address = self.sock.recvfrom(buffer)
             client_ip = address[0]
             print(f'Client {client_ip} sent a heartbeat')
-            increase_client(client_ip)
+            update_heartbeat(client_ip)
         except socket.timeout:
             decrease_all_clients()
             remove_inactive_clients()
