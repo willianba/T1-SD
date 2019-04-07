@@ -1,4 +1,5 @@
 from services import Service
+from time import sleep
 import socket
 import threading
 import sys
@@ -6,6 +7,9 @@ import os
 import json
 
 resources = {}
+connected_clients = {}
+timeout = 2
+verification_time = 5
 semaphore = threading.Condition()
 
 
@@ -24,6 +28,48 @@ def get_all_files():
             result['files'].append(key_list)
     semaphore.release()
     return result
+
+
+def create_new_client(client_ip, files):
+    semaphore.acquire()
+    global resources
+    global connected_clients
+    resources[client_ip] = files
+    connected_clients[client_ip] = timeout
+    semaphore.release()
+
+
+def decrease_all_clients():
+    semaphore.acquire()
+    global resources
+    global connected_clients
+    for client in connected_clients:
+        connected_clients[client] -= 1
+    semaphore.release()
+
+
+def increase_client(client_ip):
+    semaphore.acquire()
+    global connected_clients
+    connected_clients[client_ip] += 1
+    semaphore.release()
+
+
+def remove_inactive_clients():
+    remove_value = 0
+    removed_clients = []
+    semaphore.acquire()
+    global resources
+    global connected_clients
+    for client in connected_clients:
+        client_value = connected_clients[client]
+        if client_value <= remove_value:
+            removed_clients.append(client)
+    for client in removed_clients:
+        print(f"Removing {client} due to inactivity")
+        del resources[client]
+        del connected_clients[client]
+    semaphore.release()
 
 
 class Thread(threading.Thread):
