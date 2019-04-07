@@ -4,28 +4,40 @@ from program import Thread
 from services import Service
 
 
-def start_server():
-    print("Running server.")
-    threads = [
-        Thread(Service.SIGN_UP.value),
-        Thread(Service.QUERY.value)
-    ]
+def run_threads(threads):
     for thread in threads:
         thread.start()
     for thread in threads:
         thread.join()
 
 
+def start_server():
+    print("Running server.")
+    threads = [
+        Thread(Service.SIGN_UP.value),
+        Thread(Service.QUERY.value),
+        Thread(Service.HEARTBEAT.value)
+    ]
+    run_threads(threads)
+
+
 def start_client(args):
     print("Running client.")
-    thread = None
+    threads = []
     server_ip = args.client[0]
-    if args.signup:
-        thread = Thread(Service.SIGN_UP.value, server_ip, client=True)
-    elif args.query:
-        thread = Thread(Service.QUERY.value, server_ip, client=True)
-    thread.start()
-    thread.join()
+    services = args.__dict__
+    for service in services:
+        if services[service] is True:
+            threads.append(client_threads_factory(service, server_ip))
+    run_threads(threads)
+
+
+def client_threads_factory(service, server_ip):
+    return {
+        Service.SIGN_UP.name: Thread(Service.SIGN_UP.value, server_ip, client=True),
+        Service.HEARTBEAT.name: Thread(Service.HEARTBEAT.value, server_ip, client=True),
+        Service.QUERY.name: Thread(Service.QUERY.value, server_ip, client=True)
+    }.get(service.upper())
 
 
 def main():
