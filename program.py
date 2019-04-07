@@ -85,23 +85,30 @@ class Thread(threading.Thread):
         self.select_server_or_client()
 
     def select_server_or_client(self):
-        if not self.client:
+        service = self.get_service()
+        if self.client:
+            service()
+        else:
             self.sock.bind(self.server_address)
-        self.execute_service()()
+            while True:
+                service()
 
     # since python doesn't have a switch case statement, this is a way to implement it
-    def execute_service(self):
+    def get_service(self):
         if self.client:
             return {
                 Service.SIGN_UP.value: self.client_sign_up,
-                Service.QUERY.value: self.client_query_files
+                Service.QUERY.value: self.client_query,
+                Service.HEARTBEAT.value: self.client_heartbeat
             }.get(self.port, service_undefined)
         else:
             return {
                 Service.SIGN_UP.value: self.server_sign_up,
-                Service.QUERY.value: self.server_query_files
+                Service.QUERY.value: self.server_query,
+                Service.HEARTBEAT.value: self.server_heartbeat
             }.get(self.port, service_undefined)
 
+    # generic method which contains all necessary exceptions to execute client functions
     def execute_client_func(self, func, folder=None):
         try:
             if folder:
@@ -136,30 +143,48 @@ class Thread(threading.Thread):
         files = data['files']
         print(f"These are the available files: {', '.join([str(x) for x in files])}")
 
+    def heartbeat(self):
+        while True:
+            self.sock.sendto(b"heartbeat", self.server_address)
+            sleep(verification_time)
+
     def client_sign_up(self):
         folder = input("Specify folder to share files: ")
         self.execute_client_func(self.sign_up, folder)
 
-    def client_query_files(self):
+    def client_query(self):
         self.execute_client_func(self.query)
+
+    def client_heartbeat(self):
+        self.execute_client_func(self.heartbeat)
 
     def server_sign_up(self):
         data, address = self.sock.recvfrom(4096)
         client_ip = address[0]
         data = json.loads(data)
-        files = data['files']
-        print(f"Client {client_ip} connected and sent {len(files)} files.")
         if data:
-            print('Confirming connection.')
-            semaphore.acquire()
-            global resources
-            resources[client_ip] = files
-            semaphore.release()
+            files = data['files']
+            print(f"Client {client_ip} connected and sent {len(files)} files.")
+            create_new_client(client_ip, files)
             self.sock.sendto(b"Connected", address)
 
-    def server_query_files(self):
+    def server_query(self):
         data, address = self.sock.recvfrom(4096)
         client_ip = address[0]
         print(f"Sending {client_ip} a list of available files.")
         files = get_all_files()
         self.sock.sendto(json.dumps(files).encode(), address)
+
+    def server_heartbeat(self):
+        tolerance = 0.05
+        try:
+            # using tolerance because if timeout is the same as heartbeat time, it will timeout always
+            self.sock.settimeout(verification_time + tolerance)
+            data, address = self.sock.recvfrom(4096)
+            client_ip = address[0]
+            print(f'Client {client_ip} sent a heartbeat')
+            increase_client(client_ip)
+        except socket.timeout:
+            decrease_all_clients()
+            remove_inactive_clients()
+            self.server_heartbeat()
