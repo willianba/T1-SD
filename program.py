@@ -173,7 +173,7 @@ class Thread(threading.Thread):
         self.sock.sendto(b"query", self.server_address)
         print("Waiting files from server.")
         data = self.sock.recv(buffer)
-        data = json.loads(data)
+        data = json.loads(data.decode())
         files = data['files']
         print("These are the available files: {}".format(', '.join([str(x) for x in files])))
 
@@ -239,7 +239,7 @@ class Thread(threading.Thread):
     def server_retrieve(self):
         data, address = self.sock.recvfrom(buffer)
         client_ip = address[0]
-        file = json.loads(data)
+        file = json.loads(data.decode())
         if file:
             file = file['file']
             print("Client {} wants file {}".format(client_ip, file))
