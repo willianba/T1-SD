@@ -42,11 +42,10 @@ def get_all_files():
 
 
 def get_peer_from_file(params):
-    peer = None
     for client, resources_list in resources.items():
         if params['file'] in resources_list:
-            peer = client
-    return peer
+            return client
+    return None
 
 
 def create_new_client(params):
