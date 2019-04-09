@@ -9,6 +9,7 @@ import json
 resources = {}  # hash to save clients and its resources
 connected_clients = {}  # hash to save clients connected to server
 timeout = 2  # heartbeat timeout counter
+client_timeout = 10  # timeout to disconnect the client if it cannot reach a host
 verification_time = 5  # time in seconds to receive/send heartbeat
 buffer = 4096  # buffer size to sockets
 semaphore = threading.Condition()  # semaphore to control critical section
@@ -88,7 +89,7 @@ def create_send_peer():
 
 
 class Thread(threading.Thread):
-    def __init__(self, port, host="localhost", client=False):
+    def __init__(self, port, host="0.0.0.0", client=False):
         threading.Thread.__init__(self)
         self.client = client
         self.host = host
@@ -133,6 +134,7 @@ class Thread(threading.Thread):
     # generic method which contains all necessary exceptions to execute client functions
     def execute_client_func(self, func, arg=None):
         try:
+            self.sock.settimeout(client_timeout)
             if arg:
                 func(arg)
             else:
@@ -152,6 +154,9 @@ class Thread(threading.Thread):
         except json.decoder.JSONDecodeError:
             print("File not found.")
             sys.exit(-3)
+        except KeyboardInterrupt:
+            print("Process killed by client.")
+            sys.exit(-4)
         finally:
             self.sock.close()
 
@@ -268,9 +273,9 @@ class Thread(threading.Thread):
         peer_address = (peer_ip, Service.SEND.value)
         self.sock.sendto(json.dumps(file).encode(), peer_address)
         file = file['file']
-        created_file = open(f'{file}', 'wb')
-        print(f"Retrieving file {file}")
         data, address = self.sock.recvfrom(buffer)
+        print(f"Retrieving file {file}")
+        created_file = open(f'{file}', 'wb')
         try:
             while data:
                 created_file.write(data)
