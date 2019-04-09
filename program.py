@@ -77,7 +77,7 @@ def remove_inactive_clients():
         if client_value <= remove_value:
             removed_clients.append(client)
     for client in removed_clients:
-        print(f"Removing {client} due to inactivity")
+        print("Removing {} due to inactivity".format(client))
         del resources[client]
         del connected_clients[client]
 
@@ -109,7 +109,7 @@ class Thread(threading.Thread):
                 while True:
                     service()
             except OSError:
-                print(f"Another process is already using port {self.server_address[1]}.")
+                print("Another process is already using port {}.".format(self.server_address[1]))
                 sys.exit(-5)
 
     # since python doesn't have a switch case statement, this is a way to implement it
@@ -166,7 +166,7 @@ class Thread(threading.Thread):
         print('Waiting server response.')
         data, server = self.sock.recvfrom(buffer)
         data = data.decode()
-        print(f"Received: {data}")
+        print("Received: {}".format(data))
         create_send_peer()
 
     def query(self):
@@ -175,7 +175,7 @@ class Thread(threading.Thread):
         data = self.sock.recv(buffer)
         data = json.loads(data)
         files = data['files']
-        print(f"These are the available files: {', '.join([str(x) for x in files])}")
+        print("These are the available files: {}".format(', '.join([str(x) for x in files])))
 
     def heartbeat(self):
         while True:
@@ -189,7 +189,7 @@ class Thread(threading.Thread):
         peer_ip, server = self.sock.recvfrom(buffer)
         peer_ip = json.loads(peer_ip.decode())
         peer_ip = peer_ip['client']
-        print(f"Connecting to peer {peer_ip}")
+        print("Connecting to peer {}".format(peer_ip))
         self.peer_retrieve_file(peer_ip, data)
 
     def client_sign_up(self):
@@ -209,17 +209,17 @@ class Thread(threading.Thread):
     def server_sign_up(self):
         data, address = self.sock.recvfrom(buffer)
         client_ip = address[0]
-        data = json.loads(data)
+        data = json.loads(data.decode())
         if data:
             files = data['files']
-            print(f"Client {client_ip} connected and sent {len(files)} files.")
+            print("Client {} connected and sent {} files.".format(client_ip, len(files)))
             execute_static_func(create_new_client, client=client_ip, files=files)
             self.sock.sendto(b"Connected", address)
 
     def server_query(self):
         data, address = self.sock.recvfrom(buffer)
         client_ip = address[0]
-        print(f"Sending {client_ip} a list of available files.")
+        print("Sending {} a list of available files.".format(client_ip))
         files = execute_static_func(get_all_files)
         self.sock.sendto(json.dumps(files).encode(), address)
 
@@ -242,7 +242,7 @@ class Thread(threading.Thread):
         file = json.loads(data)
         if file:
             file = file['file']
-            print(f"Client {client_ip} wants file {file}")
+            print("Client {} wants file {}".format(client_ip, file))
             peer_ip = execute_static_func(get_peer_from_file, file=file)
             if peer_ip:
                 data = {'client': peer_ip}
@@ -257,9 +257,9 @@ class Thread(threading.Thread):
             file = json.loads(file.decode())
             file = file['file']
             client_ip = address[0]
-            opened_file = open(f"files/{file}", "rb")
+            opened_file = open("files/{}".format(file), "rb")
             data = opened_file.read(buffer)
-            print(f"Sending {file} to {client_ip}")
+            print("Sending {} to {}".format(file, client_ip))
             while data:
                 if self.sock.sendto(data, address):
                     data = opened_file.read(buffer)
@@ -273,8 +273,8 @@ class Thread(threading.Thread):
         self.sock.sendto(json.dumps(file).encode(), peer_address)
         file = file['file']
         data, address = self.sock.recvfrom(buffer)
-        print(f"Retrieving file {file}")
-        created_file = open(f'{file}', 'wb')
+        print("Retrieving file {}".format(file))
+        created_file = open('{}'.format(file), 'wb')
         try:
             while data:
                 created_file.write(data)
