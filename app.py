@@ -1,6 +1,6 @@
 import argparse
 import sys
-from program import Thread
+from program import P2PThread
 from services import Service
 
 
@@ -14,10 +14,10 @@ def run_threads(threads):
 def start_server():
     print("Running server.")
     threads = [
-        Thread(Service.SIGN_UP.value),
-        Thread(Service.QUERY.value),
-        Thread(Service.HEARTBEAT.value),
-        Thread(Service.RETRIEVE.value)
+        P2PThread(Service.SIGN_UP.value),
+        P2PThread(Service.QUERY.value),
+        P2PThread(Service.HEARTBEAT.value),
+        P2PThread(Service.RETRIEVE.value)
     ]
     run_threads(threads)
 
@@ -35,10 +35,10 @@ def start_client(args):
 
 def client_threads_factory(service, server_ip):
     return {
-        Service.SIGN_UP.name: Thread(Service.SIGN_UP.value, server_ip, client=True),
-        Service.HEARTBEAT.name: Thread(Service.HEARTBEAT.value, server_ip, client=True),
-        Service.QUERY.name: Thread(Service.QUERY.value, server_ip, client=True),
-        Service.RETRIEVE.name: Thread(Service.RETRIEVE.value, server_ip, client=True)
+        Service.SIGN_UP.name: P2PThread(Service.SIGN_UP.value, server_ip, client=True),
+        Service.HEARTBEAT.name: P2PThread(Service.HEARTBEAT.value, server_ip, client=True),
+        Service.QUERY.name: P2PThread(Service.QUERY.value, server_ip, client=True),
+        Service.RETRIEVE.name: P2PThread(Service.RETRIEVE.value, server_ip, client=True)
     }.get(service.upper())
 
 

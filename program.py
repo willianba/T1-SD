@@ -1,7 +1,7 @@
+from threading import Thread, Lock
 from services import Service
 from time import sleep
 import socket
-import threading
 import sys
 import os
 import json
@@ -12,7 +12,7 @@ timeout = 2  # heartbeat timeout counter
 client_timeout = 10  # timeout to disconnect the client if it cannot reach a host
 verification_time = 5  # time in seconds to receive/send heartbeat
 buffer = 4096  # buffer size to sockets
-semaphore = threading.Condition()  # semaphore to control critical section
+mutex = Lock()  # semaphore to control critical section
 
 
 # this is the default value for the switch statement
@@ -22,12 +22,12 @@ def service_undefined():
 
 
 def execute_static_func(func, **kwargs):
-    semaphore.acquire()
+    mutex.acquire()
     if kwargs:
         result = func(kwargs)
     else:
         result = func()
-    semaphore.release()
+    mutex.release()
     if result:
         return result
 
@@ -83,13 +83,13 @@ def remove_inactive_clients():
 
 
 def create_send_peer():
-    thread = Thread(Service.SEND.value)
+    thread = P2PThread(Service.SEND.value)
     thread.start()
 
 
-class Thread(threading.Thread):
+class P2PThread(Thread):
     def __init__(self, port, host="0.0.0.0", client=False):
-        threading.Thread.__init__(self)
+        Thread.__init__(self)
         self.client = client
         self.host = host
         self.port = port
@@ -150,6 +150,9 @@ class Thread(threading.Thread):
         except socket.gaierror:
             print("Host unavailable.")
             sys.exit(-2)
+        except socket.timeout:
+            print("Connection timed out.")
+            sys.exit(-2)
         except json.decoder.JSONDecodeError:
             print("File not found.")
             sys.exit(-3)
@@ -173,7 +176,7 @@ class Thread(threading.Thread):
         self.sock.sendto(b"query", self.server_address)
         print("Waiting files from server.")
         data = self.sock.recv(buffer)
-        data = json.loads(data)
+        data = json.loads(data.decode())
         files = data['files']
         print(f"These are the available files: {', '.join([str(x) for x in files])}")
 
@@ -209,7 +212,7 @@ class Thread(threading.Thread):
     def server_sign_up(self):
         data, address = self.sock.recvfrom(buffer)
         client_ip = address[0]
-        data = json.loads(data)
+        data = json.loads(data.decode())
         if data:
             files = data['files']
             print(f"Client {client_ip} connected and sent {len(files)} files.")
@@ -239,7 +242,7 @@ class Thread(threading.Thread):
     def server_retrieve(self):
         data, address = self.sock.recvfrom(buffer)
         client_ip = address[0]
-        file = json.loads(data)
+        file = json.loads(data.decode())
         if file:
             file = file['file']
             print(f"Client {client_ip} wants file {file}")
